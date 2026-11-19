@@ -1,3 +1,6 @@
+
+![输入图片说明](ScreenShot_2026-11-19_073515_209.png)
+
 # 星点投屏
 
 支持 **Android / 鸿蒙(HarmonyOS)** 双端的桌面投屏与控制软件，投屏窗口带**手机机型边框**。功能对标 [escrcpy](https://github.com/viarotel-org/escrcpy)。

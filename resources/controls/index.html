@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>星点投屏 · 浮动控制栏</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        user-select: none;
+        font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      }
+
+      .bar {
+        -webkit-app-region: drag;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        padding: 8px 6px;
+        border-radius: 26px;
+        background: rgba(22, 24, 30, 0.92);
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.08),
+          0 12px 32px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .btn {
+        -webkit-app-region: no-drag;
+        width: 42px;
+        height: 34px;
+        border: none;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.07);
+        color: #dfe3ec;
+        font-size: 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+      }
+
+      .btn:hover {
+        background: rgba(79, 140, 255, 0.35);
+      }
+
+      .btn:active {
+        transform: scale(0.92);
+      }
+
+      .btn.accent {
+        background: rgba(79, 140, 255, 0.28);
+        color: #9dbcff;
+      }
+
+      .title {
+        -webkit-app-region: no-drag;
+        color: #6d7686;
+        font-size: 9px;
+        max-width: 46px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar" id="bar">
+      <div class="title" id="title">设备</div>
+      <button class="btn accent" data-action="back" title="返回">◀</button>
+      <button class="btn accent" data-action="home" title="主页">○</button>
+      <button class="btn accent" data-action="recents" title="任务">▢</button>
+      <button class="btn" data-action="power" title="电源">⏻</button>
+      <button class="btn" data-action="volumeUp" title="音量+">✚</button>
+      <button class="btn" data-action="volumeDown" title="音量-">➖</button>
+      <button class="btn" data-action="rotate" title="旋转屏幕">⟳</button>
+      <button class="btn" data-action="notifications" title="通知栏">▤</button>
+      <button class="btn" data-action="screenshot" title="截屏">▣</button>
+    </div>
+    <script src="./controls.js"></script>
+  </body>
+</html>

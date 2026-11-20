@@ -5,6 +5,8 @@ tags: Electron, 投屏, WebCodecs, Android, 开源
 
 # 写了个开源投屏工具：一个窗口搞定 Android / 鸿蒙投屏，带机型边框
 
+![星点投屏界面效果](界面效果.png)
+
 最近花了些时间做了个桌面投屏工具「星点投屏」，已经开源。这篇文章不吹功能清单，主要聊聊实现过程中几个挺有意思的技术问题，以及我是怎么解决的。如果你也在做 Electron 桌面应用或者实时视频渲染，也许能少踩几个坑。
 
 开源地址：
@@ -60,9 +62,8 @@ HarmonyOS NEXT 没有 adb，走的是 hosScrcpy 方案——设备端推 `.so` �
 
 ## 下载与构建
 
-普通用户直接下载安装包双击安装即可（Windows）：
-- https://gitee.com/zzjnat/star-cast/releases
-- https://github.com/zhangkalv/star-cast/releases
+普通用户直接下载安装包双击安装即可（Windows，单个完整 exe）：
+- 最新版：https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_0.1.1.exe
 
 开发者构建：
 

@@ -6,7 +6,7 @@ import crypto from 'crypto'
 import { app } from 'electron'
 import { logger } from '../logger.js'
 import { resourcePath } from './paths.js'
-import { resolveBinary } from './binary-locator.js'
+import { hdcBin } from './hdc.js'
 
 
 function javaBin() {
@@ -26,6 +26,40 @@ function sidecarClasspath() {
   const outDir = resourcePath('hos', 'out')
   const sep = process.platform === 'win32' ? ';' : ':'
   return [jar, outDir].join(sep)
+}
+
+function hdcShell(deviceId, cmd, timeout = 5000) {
+  return new Promise((resolve) => {
+    const hdc = hdcBin()
+    if (!hdc) return resolve({ ok: false, out: '', err: 'hdc not found' })
+    let child
+    try {
+      child = spawn(hdc, ['-t', deviceId, 'shell', cmd], { windowsHide: true })
+    } catch (e) {
+      return resolve({ ok: false, out: '', err: e.message })
+    }
+    let out = ''
+    let err = ''
+    let done = false
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      resolve({ ok, out, err })
+    }
+    const timer = setTimeout(() => {
+      try { child.kill() } catch {}
+      finish(false)
+    }, timeout)
+    child.stdout.on('data', (d) => { out += d.toString() })
+    child.stderr.on('data', (d) => { err += d.toString() })
+    child.on('error', () => finish(false))
+    child.on('close', (code) => {
+      const text = (out + err).trim()
+      const failed = /(^|\s)(error|fail|failed|not found|unknown command|invalid)(\s|:|$)/i.test(text)
+      finish(code === 0 && !failed)
+    })
+  })
 }
 
 class WsClient {
@@ -158,7 +192,7 @@ export async function startHosSidecar(deviceId, { onFrame, onFirstFrame, onMessa
   }
 
   const java = javaBin()
-  const hdc = resolveBinary('hdc', '')
+  const hdc = hdcBin()
   if (!hdc) throw new Error('未找到 hdc，请在「设置 → 通用」中指定路径')
 
   const cp = sidecarClasspath()
@@ -288,7 +322,7 @@ export async function startHosSidecar(deviceId, { onFrame, onFirstFrame, onMessa
     ])
     if (autoStart) ws.sendText(JSON.stringify({ type: 'screen', mode: 'video' }))
 
-    return {
+    const api = {
       dims,
       stop,
       input: (ev) => {
@@ -313,9 +347,67 @@ export async function startHosSidecar(deviceId, { onFrame, onFirstFrame, onMessa
         }
       },
       key: (name) => ws.sendText(JSON.stringify({ type: 'key', name })),
+      shell: (cmd) => ws.sendText(JSON.stringify({ type: 'shell', cmd })),
+      inputText: (text) => {
+        const str = String(text == null ? '' : text)
+        if (!str) return Promise.resolve({ ok: true })
+        const escaped = str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$')
+        return hdcShell(deviceId, `uitest uiInput text "${escaped}"`, 4000).then((r) => {
+          if (r.ok) return r
+          logger.warn('[hos-sidecar] uitest text 失败，回退 uinput', deviceId, JSON.stringify(r))
+          const safe = str.replace(/'/g, `'\\''`)
+          ws.sendText(JSON.stringify({ type: 'shell', cmd: `uinput -K -t '${safe}'` }))
+          return r
+        })
+      },
+      inputKeycode: (() => {
+        const lastAt = new Map()
+        return (code, meta = 0) => {
+          const now = Date.now()
+          const key = `${code}:${meta}`
+          if (now - (lastAt.get(key) || 0) < 90) return
+          lastAt.set(key, now)
+          // 字符串 code 直接作为 ArkTS KeyCode 表达式交给 uitest（支持组合键）
+          if (typeof code === 'string' && code.trim()) {
+            return api.uitestKey(code.trim())
+          }
+          // 数字键码转为 ArkTS KeyCode：这里只把已确认走 uinput 会失败的关键键改道
+          const HOS_CODE = {
+            67: 2055, // DEL/退格
+            66: 2054, // ENTER
+            23: 2016  // DPAD_CENTER
+          }
+          if (HOS_CODE[Number(code)] != null) {
+            return api.uitestKey(String(HOS_CODE[Number(code)]))
+          }
+          const parts = []
+          if (meta & 0x1000) parts.push('-d 29') // KEY_LEFTCTRL
+          if (meta & 0x0002) parts.push('-d 56') // KEY_LEFTSHIFT
+          parts.push(`-d ${code} -u ${code}`)
+          if (meta & 0x1000) parts.push('-u 29')
+          if (meta & 0x0002) parts.push('-u 56')
+          ws.sendText(JSON.stringify({ type: 'shell', cmd: `uinput -K ${parts.join(' ')}` }))
+        }
+      })(),
+      uitestKey: (expr) => {
+        const cmd = `uitest uiInput keyEvent ${String(expr || '').trim()}`
+        return hdcShell(deviceId, cmd).then((r) => {
+          logger.info('[hos-sidecar] keyEvent', deviceId, expr, JSON.stringify(r))
+          return r
+        })
+      },
+      pasteFromClipboard: (text) => api.inputText(text),
+      copyFromDevice: (cut = false) => {
+        ws.sendText(JSON.stringify({ type: 'shell', cmd: cut ? 'uinput -K -d 29 -d 55 -u 55 -u 29' : 'uinput -K -d 29 -d 46 -u 46 -u 29' }))
+      },
+      scroll: (delta) => {
+        const dir = (Number(delta) || 0) >= 0 ? 5 : -5
+        ws.sendText(JSON.stringify({ type: 'shell', cmd: `uinput -M -s ${dir}` }))
+      },
       screen: (mode) => ws.sendText(JSON.stringify({ type: 'screen', mode })),
       setBroadcast: (on) => ws.sendText(JSON.stringify({ type: 'screen', mode: on ? 'resume' : 'pause' }))
     }
+    return api
   } catch (e) {
     stop()
     throw e

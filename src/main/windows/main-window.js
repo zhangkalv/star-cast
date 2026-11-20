@@ -1,6 +1,7 @@
 import { BrowserWindow, shell, app } from 'electron'
 import { join } from 'path'
 import { logger } from '../logger.js'
+import { configStore } from '../config.js'
 import { resourcePath, preloadPath } from '../services/paths.js'
 
 let mainWindow = null
@@ -13,6 +14,7 @@ export function createMainWindow() {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
+    alwaysOnTop: !!configStore.get().window.alwaysOnTop,
     backgroundColor: '#0f1115',
     title: '星点投屏',
     icon: resourcePath('logo.png'),

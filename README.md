@@ -1,5 +1,7 @@
 # 星点投屏
 
+![星点投屏界面效果](界面效果.png)
+
 支持 **Android / 鸿蒙(HarmonyOS)** 双端的桌面投屏与控制软件，投屏窗口带**手机机型边框**。功能对标 [escrcpy](https://github.com/viarotel-org/escrcpy)。
 
 ## 功能
@@ -85,10 +87,7 @@ electron-vite + Vue 3 + Pinia
 
 普通用户无需配置开发环境，直接下载安装包双击安装即可：
 
-- **GitHub Releases（推荐，单个完整 exe）**：https://github.com/zhangkalv/star-cast/releases
-- **Gitee Releases（国内速度快）**：https://gitee.com/zzjnat/star-cast/releases
-
-> Gitee 单文件限制 100MB，安装包被拆成 `星点投屏.Setup.7z.001`（80MB）和 `.002`（49.6MB）两个分卷。两个都下载到同一目录后，用 7-Zip 对 `.001` 右键「解压到当前文件夹」即可得到完整的 `星点投屏 Setup 0.1.0.exe`。想要单个 exe 请走 GitHub 链接。
+- **最新版下载（单个完整 exe，推荐）**：[星点投屏 Setup 0.1.1.exe](https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_0.1.1.exe)
 
 内置 adb / scrcpy / hdc 等工具，**装完即可用**，无需另外配置环境变量。首次用 USB 投屏需在手机上开启「开发者选项 → USB 调试」。
 

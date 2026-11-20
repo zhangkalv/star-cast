@@ -6,6 +6,7 @@ import { queryWindow, startDragLoop, waitMouseRelease } from '../services/win32-
 const payloadByWcId = new Map()
 const sessions = new Map() // sessionId -> { payload, frameWin, outer, showBezel, innerRadius }
 const watchers = new Map()
+const topmostTimers = new Map() // sessionId -> timer（置顶看门狗）
 const drags = new Map() // sessionId -> { loop }
 
 function physToDip(rect) {
@@ -66,6 +67,7 @@ export function openFrameWindow(sessionId, payload) {
   logger.debug('[frame] 打开外壳', sessionId, { showBezel, outer, innerRadius })
 
   const unified = !!payload.unified
+  const wantTopmost = payload.topmost !== false
   const frameWin = new BrowserWindow({
     ...outer,
     ...(unified ? { title: payload.windowTitle } : {}),
@@ -77,7 +79,7 @@ export function openFrameWindow(sessionId, payload) {
     maximizable: false,
     fullscreenable: false,
     focusable: !!unified,
-    alwaysOnTop: true,
+    alwaysOnTop: unified ? wantTopmost : true,
     skipTaskbar: !unified,
     ...(unified ? { icon: resourcePath('logo.png') } : {}),
     hasShadow: false,
@@ -157,7 +159,6 @@ export function showFrameWindow(sessionId) {
   if (!meta || !meta.frameWin || meta.frameWin.isDestroyed() || meta.frameShown) return
   meta.frameShown = true
   meta.frameWin.showInactive()
-  meta.frameWin.moveTop()
   const repaint = () => {
     if (!meta.frameWin || meta.frameWin.isDestroyed()) return
     try {
@@ -165,12 +166,13 @@ export function showFrameWindow(sessionId) {
       const b = meta.frameWin.getBounds()
       meta.frameWin.setBounds({ ...b, x: b.x + 1 })
       meta.frameWin.setBounds(b)
-      meta.frameWin.moveTop()
     } catch {}
   }
   setTimeout(repaint, 120)
   setTimeout(repaint, 500)
   setTimeout(repaint, 1500)
+  const wantOn = meta.payload ? meta.payload.topmost !== false : true
+  if (wantOn) applyTopmost(meta, true)
   logger.debug('[frame] 边框显示', sessionId)
 }
 
@@ -195,7 +197,7 @@ export function alignOverlays(sessionId) {
   applyOverlayBounds(sessionId, dipRect)
   if (meta.frameShown && meta.frameWin && !meta.frameWin.isDestroyed()) {
     meta.frameWin.showInactive()
-    meta.frameWin.moveTop()
+    if (meta.frameWin.isAlwaysOnTop()) pinTopmost(meta)
   }
   logger.debug('[frame] 已对齐', sessionId, dipRect)
 }
@@ -207,14 +209,55 @@ export function setFrameMouseState(senderId, ring) {
   if (!meta || !meta.frameWin || meta.frameWin.isDestroyed()) return
   if (drags.has(payload.sessionId)) return
   if (meta.unified) return
-  meta.frameWin.setIgnoreMouseEvents(!ring, { forward: true })
+  try {
+    meta.frameWin.setIgnoreMouseEvents(!ring, { forward: true })
+    // 点击穿透切换会重写 GWL_EXSTYLE，把窗口踢出置顶带，需立即重新钉住
+    if (meta.frameWin.isAlwaysOnTop()) setTimeout(() => pinTopmost(meta), 0)
+  } catch {}
 }
 
 export function setFrameTopmost(sessionId, on) {
   const meta = sessions.get(sessionId)
   if (!meta || !meta.frameWin || meta.frameWin.isDestroyed()) return
-  meta.frameWin.setAlwaysOnTop(!!on)
-  if (on) meta.frameWin.moveTop()
+  applyTopmost(meta, !!on)
+}
+
+function pinTopmost(meta) {
+  const win = meta && meta.frameWin
+  if (!win || win.isDestroyed()) return
+  // screen-saver 级别会在 Windows 上重新走 SetWindowPos(HWND_TOPMOST)，
+  // 不移动、不缩放、不抢焦点，可修复“样式位为真但已掉出置顶带”的情况
+  try { win.setAlwaysOnTop(true, 'screen-saver') } catch {}
+}
+
+function stopTopmostWatchdog(sessionId) {
+  const timer = topmostTimers.get(sessionId)
+  if (timer) clearInterval(timer)
+  topmostTimers.delete(sessionId)
+}
+
+function applyTopmost(meta, on) {
+  const sessionId = meta.payload && meta.payload.sessionId
+  if (!meta || !meta.frameWin || meta.frameWin.isDestroyed()) return
+  const win = meta.frameWin
+  try { win.setAlwaysOnTop(!!on, on ? 'screen-saver' : 'floating') } catch {}
+  if (on) {
+    pinTopmost(meta)
+    stopTopmostWatchdog(sessionId)
+    const timer = setInterval(() => pinTopmost(meta), 3000)
+    topmostTimers.set(sessionId, timer)
+    setTimeout(() => pinTopmost(meta), 150)
+  } else {
+    stopTopmostWatchdog(sessionId)
+  }
+  logger.info('[frame] topmost', sessionId, on)
+}
+
+export function raiseFrameWindow(win) {
+  if (!win || win.isDestroyed()) return
+  for (const meta of sessions.values()) {
+    if (meta.frameWin === win) { applyTopmost(meta, true); return }
+  }
 }
 
 export function startWindowDrag(sessionId) {
@@ -275,7 +318,10 @@ export function startWindowDrag(sessionId) {
       }
       const inInner =
         c.x >= inner.x && c.x <= inner.x + inner.width && c.y >= inner.y && c.y <= inner.y + inner.height
-      meta.frameWin.setIgnoreMouseEvents(inInner, { forward: true })
+      try {
+        meta.frameWin.setIgnoreMouseEvents(inInner, { forward: true })
+        if (meta.frameWin.isAlwaysOnTop()) setTimeout(() => pinTopmost(meta), 0)
+      } catch {}
     }
     alignOverlays(sessionId)
     logger.debug('[frame] 拖动结束', sessionId)
@@ -336,6 +382,7 @@ export function stopRestoreWatcher(sessionId) {
 
 export function closeFrameWindow(sessionId) {
   stopRestoreWatcher(sessionId)
+  stopTopmostWatchdog(sessionId)
   stopWindowDrag(sessionId)
   const st = drags.get(sessionId)
   if (st) {

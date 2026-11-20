@@ -80,6 +80,7 @@
       btns.style.right = `${Math.max(20, Math.round(model.radius * 0.8))}px`
     }
     btnTopmost.classList.toggle('active', !!data.topmost)
+    btnTopmost.title = data.topmost ? '取消置顶' : '开启置顶'
 
     const devName = (data.device && (data.device.name || data.device.id)) || ''
     if (frameTitle) {
@@ -135,6 +136,9 @@
     configured: false,
     sps: null,
     pps: null,
+    pendingIdr: null,
+    delivered: 0,
+    fed: 0,
     ctx: screenCanvas.getContext('2d'),
     frames: 0
   }
@@ -206,6 +210,27 @@
     }
   }
 
+  function emitChunk(sps, pps, slices, isKey) {
+    const out = []
+    const SC = new Uint8Array([0, 0, 0, 1])
+    if (sps && isKey) { out.push(SC, sps) }
+    if (pps && isKey) { out.push(SC, pps) }
+    for (const s of slices) { out.push(SC, s.nal) }
+    const total = out.reduce((a, n) => a + n.length, 0)
+    const chunk = new Uint8Array(total)
+    let off = 0
+    for (const n of out) { chunk.set(n, off); off += n.length }
+    const now = performance.now() * 1000
+    try {
+      h264.decoder.decode(
+        new EncodedVideoChunk({ type: isKey ? 'key' : 'delta', timestamp: Math.round(now), data: chunk })
+      )
+      h264.fed++
+    } catch (e) {
+      log('decode 异常', e.message)
+    }
+  }
+
   function feedH264(bytes) {
     if (!h264.decoder) return
     const nals = parseNals(bytes)
@@ -221,32 +246,29 @@
     if (sps) h264.sps = sps
     if (pps) h264.pps = pps
     if (!h264.configured && h264.sps && h264.pps) configureDecoder(h264.sps, h264.pps)
+
+    const idrSlices = slices.filter((s) => s.idr)
+    if (idrSlices.length) h264.pendingIdr = { slices: idrSlices, sps: sps || h264.sps, pps: pps || h264.pps }
     if (!h264.configured) return
 
-    if (!slices.length) return
-    const isKey = slices.some((s) => s.idr)
-    const out = []
-    const SC = new Uint8Array([0, 0, 0, 1])
-    if (sps && isKey) { out.push(SC, sps) }
-    if (pps && isKey) { out.push(SC, pps) }
-    for (const s of slices) { out.push(SC, s.nal) }
-    const total = out.reduce((a, n) => a + n.length, 0)
-    const chunk = new Uint8Array(total)
-    let off = 0
-    for (const n of out) { chunk.set(n, off); off += n.length }
-    const now = performance.now() * 1000
-    try {
-      h264.decoder.decode(
-        new EncodedVideoChunk({ type: isKey ? 'key' : 'delta', timestamp: Math.round(now), data: chunk })
-      )
-    } catch (e) {
-      log('decode 异常', e.message)
+    if (h264.pendingIdr) {
+      const key = h264.pendingIdr
+      h264.pendingIdr = null
+      if (h264.fed === 0) log('补发缓存关键帧', key.slices.length, '片')
+      emitChunk(key.sps, key.pps, key.slices, true)
     }
+    if (!slices.length) return
+    emitChunk(sps, pps, slices, slices.some((s) => s.idr))
   }
 
   ensureDecoder()
   const deliverFrame = (bytes) => {
-    if (screenCanvas.style.display !== 'none') feedH264(new Uint8Array(bytes))
+    if (screenCanvas.style.display === 'none') return
+    h264.delivered++
+    if (h264.delivered <= 3 || h264.delivered % 150 === 0) {
+      log('收到帧', h264.delivered, '字节', bytes.length, '已解码', h264.fed)
+    }
+    feedH264(new Uint8Array(bytes))
   }
   if (window.starcast && window.starcast.hos) window.starcast.hos.onFrame(deliverFrame)
   if (window.starcast && window.starcast.scrcpyFrame) window.starcast.scrcpyFrame(deliverFrame)
@@ -279,6 +301,26 @@
           ms: Math.max(80, Math.min(800, Date.now() - start.t))
         })
       }
+    })
+    view.addEventListener('wheel', (e) => {
+      if (!payload || !payload.unified || !window.starcast || !window.starcast.hos) return
+      e.preventDefault()
+      e.stopPropagation()
+      const box = view.getBoundingClientRect()
+      const x = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width))
+      const y = Math.max(0, Math.min(1, (e.clientY - box.top) / box.height))
+      const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? box.height : 1
+      window.starcast.hos.input({
+        type: 'scroll', x, y,
+        deltaX: e.deltaX * scale,
+        deltaY: e.deltaY * scale
+      })
+    }, { passive: false })
+    view.addEventListener('contextmenu', (e) => {
+      if (!payload || !payload.unified || !window.starcast || !window.starcast.hos) return
+      e.preventDefault()
+      e.stopPropagation()
+      window.starcast.hos.key('back')
     })
   }
   bindTouch(screen)
@@ -390,20 +432,84 @@
     const deviceId = (payload.device && payload.device.id) || ''
     let ok = 0
     let fail = 0
+    let lastError = ''
     for (const f of files) {
-      const p = f.path || (f.webkitRelativePath && f.name)
-      if (!p) { fail++; continue }
+      let p = null
+      try { p = window.starcast.getPathForFile && window.starcast.getPathForFile(f) } catch {}
+      p = p || f.path || (f.webkitRelativePath && f.name)
+      if (!p) { fail++; lastError = '无法获取文件路径'; continue }
       try {
         if (/\.(apk|hap)$/i.test(f.name)) {
           const r = await window.starcast.device.install(deviceId, p)
-          if (r && r.ok) ok++; else fail++
+          if (r && r.ok) ok++; else { fail++; lastError = r && r.message }
         } else {
           const remote = `/sdcard/Download/${f.name}`
           const r = await window.starcast.device.push(deviceId, p, remote)
-          if (r && r.ok) ok++; else fail++
+          if (r && r.ok) ok++; else { fail++; lastError = r && r.message }
         }
-      } catch { fail++ }
+      } catch (e) { fail++; lastError = e && e.message }
     }
-    showDropHint(`完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个` : ''}`)
+    const summary = `完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个` : ''}`
+    showDropHint(lastError ? `${summary} · ${String(lastError).slice(0, 90)}` : summary)
+  })
+
+  const NAV_KEYS = {
+    Enter: 'enter',
+    Backspace: 'del',
+    Delete: 'del',
+    Tab: 61,
+    Escape: 'back',
+    ArrowUp: 19,
+    ArrowDown: 20,
+    ArrowLeft: 21,
+    ArrowRight: 22,
+    Home: 122,
+    End: 123,
+    PageUp: 92,
+    PageDown: 93
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!payload || !payload.unified || !window.starcast) return
+    const k = e.key || ''
+    const key = k.toLowerCase()
+    const ctrl = e.ctrlKey || e.metaKey
+    if (ctrl && key === 'v') {
+      e.preventDefault()
+      e.stopPropagation()
+      window.starcast.clipboard.pasteToDevice(payload.sessionId).then((r) => {
+        showDropHint(r && r.ok ? '已粘贴到手机' : (r && r.message) || '粘贴失败')
+      }).catch(() => showDropHint('粘贴失败'))
+      return
+    }
+    if (ctrl && (key === 'c' || key === 'x')) {
+      e.preventDefault()
+      e.stopPropagation()
+      const cut = key === 'x'
+      window.starcast.clipboard.copyFromDevice(cut)
+        .then(() => showDropHint(cut ? '已在手机剪切' : '已在手机复制'))
+        .catch(() => showDropHint('操作失败'))
+      return
+    }
+    if (ctrl && key === 'a') {
+      e.preventDefault()
+      e.stopPropagation()
+      if (window.starcast.hos) window.starcast.hos.key('selectAll')
+      else if (window.starcast.input) window.starcast.input.keycode(29, 0x3000)
+      return
+    }
+    if (!ctrl && !e.altKey) {
+      const nav = NAV_KEYS[k]
+      if (nav != null && window.starcast.hos) {
+        e.preventDefault()
+        e.stopPropagation()
+        window.starcast.hos.key(nav)
+        return
+      }
+      if (k.length === 1 && window.starcast.input) {
+        e.preventDefault()
+        e.stopPropagation()
+        window.starcast.input.text(k)
+      }
+    }
   })
 })()

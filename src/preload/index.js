@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 const invoke = (channel, payload) => ipcRenderer.invoke(channel, payload)
 
@@ -9,6 +9,7 @@ const subscribe = (channel) => (callback) => {
 }
 
 const starcast = {
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   app: {
     getInfo: () => invoke('app:get-info'),
     pickFile: (options) => invoke('app:pick-file', options),
@@ -58,6 +59,14 @@ const starcast = {
     stopAll: () => invoke('scrcpy:stop-all'),
     list: () => invoke('scrcpy:list'),
     onSessionEnded: subscribe('scrcpy:session-ended')
+  },
+  clipboard: {
+    pasteToDevice: (sessionId) => invoke('clipboard:paste-to-device', sessionId),
+    copyFromDevice: (cut) => invoke('clipboard:copy-from-device', cut)
+  },
+  input: {
+    text: (text) => invoke('input:text', text),
+    keycode: (code, meta) => invoke('input:keycode', { code, meta })
   },
   frame: {
     getPayload: () => invoke('frame:get-payload'),

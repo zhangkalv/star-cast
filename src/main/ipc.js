@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, shell } from 'electron'
+import { ipcMain, dialog, app, shell, clipboard } from 'electron'
 import { join } from 'path'
 import { configStore } from './config.js'
 import { logger } from './logger.js'
@@ -19,6 +19,7 @@ import { startGnirehtet, stopGnirehtet, gnirehtetRunning } from './services/gnir
 import { frameModels } from './services/frame-models.js'
 import { getFramePayload, alignOverlays, startRestoreWatcher, setFrameMouseState, startWindowDrag, stopWindowDrag, updateFramePayload, markFrameRendered, setFrameTopmost } from './windows/frame-window.js'
 import { getControlsPayload } from './windows/controls-window.js'
+import { getMainWindow } from './windows/main-window.js'
 import { minimizeWindow, setWindowTopmost, sendWindowClose } from './services/win32-window.js'
 
 function screenshotPath(deviceId, platform) {
@@ -88,8 +89,20 @@ export function registerIpc() {
   ipcMain.handle('app:open-external', (_e, url) => shell.openExternal(url))
 
   ipcMain.handle('config:get', () => configStore.get())
-  ipcMain.handle('config:set', (_e, patch) => configStore.set(patch))
-  ipcMain.handle('config:reset', () => configStore.reset())
+  ipcMain.handle('config:set', (_e, patch) => {
+    const cfg = configStore.set(patch)
+    if (patch && patch.window && Object.prototype.hasOwnProperty.call(patch.window, 'alwaysOnTop')) {
+      const win = getMainWindow()
+      if (win && !win.isDestroyed()) win.setAlwaysOnTop(!!patch.window.alwaysOnTop)
+    }
+    return cfg
+  })
+  ipcMain.handle('config:reset', () => {
+    const cfg = configStore.reset()
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) win.setAlwaysOnTop(!!cfg.window.alwaysOnTop)
+    return cfg
+  })
 
   ipcMain.handle('devices:list', () => listAllDevices())
 
@@ -216,6 +229,57 @@ export function registerIpc() {
 
   ipcMain.handle('control:key', (_e, { deviceId, key }) => handleControlKey(deviceId, key))
 
+  ipcMain.handle('clipboard:paste-to-device', (_e, sessionId) => {
+    const session = getSession(sessionId)
+    if (session && session.hos && typeof session.hos.pasteFromClipboard === 'function') {
+      let text = ''
+      try { text = clipboard.readText() || '' } catch {}
+      if (!text) return { ok: false, message: '剪贴板为空' }
+      session.hos.pasteFromClipboard(text)
+      return { ok: true, message: '已输入剪贴板内容' }
+    }
+    if (!session || !session.stream || typeof session.stream.pasteFromClipboard !== 'function') {
+      return { ok: false, message: '当前会话不支持剪贴板同步' }
+    }
+    const ok = session.stream.pasteFromClipboard()
+    return { ok, message: ok ? '已粘贴到手机' : '剪贴板为空' }
+  })
+
+  ipcMain.handle('clipboard:copy-from-device', (event, cut = false) => {
+    const payload = getFramePayload(event.sender.id)
+    const session = payload && getSession(payload.sessionId)
+    if (session && session.hos && typeof session.hos.copyFromDevice === 'function') {
+      session.hos.copyFromDevice(cut)
+      return { ok: true, message: cut ? '已向手机发送剪切指令' : '已向手机发送复制指令' }
+    }
+    if (!session || !session.stream || typeof session.stream.copyFromDevice !== 'function') {
+      return { ok: false, message: '当前会话不支持手机复制' }
+    }
+    return { ok: session.stream.copyFromDevice(cut), message: cut ? '已向手机发送剪切指令' : '已向手机发送复制指令' }
+  })
+
+  ipcMain.handle('input:text', async (event, text) => {
+    const payload = getFramePayload(event.sender.id)
+    const session = payload && getSession(payload.sessionId)
+    if (session && session.hos && typeof session.hos.inputText === 'function') {
+      session.hos.inputText(text)
+      return { ok: true }
+    }
+    if (!session || !session.stream || typeof session.stream.inputText !== 'function') return { ok: false }
+    return { ok: await session.stream.inputText(text) }
+  })
+
+  ipcMain.handle('input:keycode', async (event, { code, meta = 0 }) => {
+    const payload = getFramePayload(event.sender.id)
+    const session = payload && getSession(payload.sessionId)
+    if (session && session.hos && typeof session.hos.inputKeycode === 'function') {
+      session.hos.inputKeycode(code, meta)
+      return { ok: true }
+    }
+    if (!session || !session.stream || typeof session.stream.inputKeycode !== 'function') return { ok: false }
+    return { ok: await session.stream.inputKeycode(code, meta) }
+  })
+
   ipcMain.handle('control:rotate', async (_e, { deviceId, orientation }) => {
     const device = await findDevice(deviceId)
     if (!device || device.platform !== 'android') return { ok: false, message: '该平台暂不支持旋转控制' }
@@ -267,6 +331,15 @@ export function registerIpc() {
         x1: Math.round(ev.x1 * dims.width), y1: Math.round(ev.y1 * dims.height),
         x2: Math.round(ev.x2 * dims.width), y2: Math.round(ev.y2 * dims.height)
       }
+    } else if (ev.type === 'scroll') {
+      if (typeof session.hos.scroll === 'function') {
+        session.hos.scroll(ev.deltaY)
+        return { ok: true }
+      }
+      const x = Math.round((ev.x || 0) * dims.width)
+      const y = Math.round((ev.y || 0) * dims.height)
+      const dy = (ev.deltaY || 0) > 0 ? -180 : 180
+      phys = { type: 'swipe', x1: x, y1: y, x2: x, y2: Math.max(0, Math.min(dims.height, y + dy)), ms: 200 }
     }
     session.hos.input(phys)
     return { ok: true }
@@ -279,6 +352,29 @@ export function registerIpc() {
     if (!session) return { ok: false }
     if (session.stream) { session.stream.key(name); return { ok: true } }
     if (!session.hos) return { ok: false }
+    const HOS_KEYS = {
+      back: 4, home: 3, recents: 187, power: 26,
+      volumeUp: 115, volumeDown: 114,
+      enter: 28,
+      del: '2055', delete: '2055',
+      selectAll: '2072 2017',
+      tab: 15, escape: 1,
+      ArrowUp: 103, ArrowDown: 108, ArrowLeft: 105, ArrowRight: 106,
+      Home: 102, End: 107, PageUp: 104, PageDown: 93
+    }
+    const ANDROID_TO_UINPUT = {
+      3: 102, 4: 4, 19: 103, 20: 108, 21: 105, 22: 106,
+      61: 15, 66: 28, 67: 67, 92: 104, 93: 109, 122: 102, 123: 107
+    }
+    let code = HOS_KEYS[name]
+    if (code == null && typeof name === 'string' && /^\d+$/.test(name)) {
+      const n = parseInt(name, 10)
+      code = ANDROID_TO_UINPUT[n] ?? n
+    }
+    if (code != null && typeof session.hos.inputKeycode === 'function') {
+      session.hos.inputKeycode(code)
+      return { ok: true }
+    }
     session.hos.key(name)
     return { ok: true }
   })
@@ -296,9 +392,10 @@ export function registerIpc() {
       }
       if (action === 'topmost') {
         const next = !session.topmost
-        if (fw && !fw.isDestroyed()) fw.setAlwaysOnTop(next)
+        setFrameTopmost(sessionId, next)
         session.topmost = next
         updateFramePayload(sessionId, { topmost: next })
+        logger.info('[window:control] 置顶切换', sessionId, next)
         return { ok: true, topmost: next }
       }
       if (action === 'close') {

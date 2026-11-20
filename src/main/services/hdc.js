@@ -2,11 +2,11 @@ import { spawn } from 'child_process'
 import { mkdirSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { configStore } from '../config.js'
-import { resolveBinary } from './binary-locator.js'
+import { resolveBinary, resolveHdc } from './binary-locator.js'
 import { logger } from '../logger.js'
 
 export function hdcBin() {
-  return resolveBinary('hdc', configStore.get().general.hdcPath)
+  return resolveHdc(configStore.get().general.hdcPath)
 }
 
 export function hdcRun(args, { timeout = 15000 } = {}) {

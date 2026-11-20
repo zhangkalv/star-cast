@@ -63,7 +63,7 @@ HarmonyOS NEXT 没有 adb，走的是 hosScrcpy 方案——设备端推 `.so` �
 ## 下载与构建
 
 普通用户直接下载安装包双击安装即可（Windows，单个完整 exe）：
-- 最新版：https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_0.1.1.exe
+- 最新版（永久链接，始终指向最新版本，无需拆卷）：https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_latest.exe
 
 开发者构建：
 

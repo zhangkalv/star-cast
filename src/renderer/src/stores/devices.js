@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { api } from '@/utils/ipc'
 import { useAppStore } from './app'
+import i18n from '@/i18n'
+
+const t = (key, params) => i18n.global.t(key, params)
 
 export const useDevicesStore = defineStore('devices', {
   state: () => ({
@@ -20,7 +23,7 @@ export const useDevicesStore = defineStore('devices', {
         this.items = await api.devices.list()
         this.sessions = await api.scrcpy.list()
       } catch (e) {
-        if (!silent) useAppStore().notify(`设备列表刷新失败：${e.message}`, 'error')
+        if (!silent) useAppStore().notify(t('action.refreshFail', { message: e.message }), 'error')
       } finally {
         if (!silent) this.loading = false
       }
@@ -28,7 +31,7 @@ export const useDevicesStore = defineStore('devices', {
     async connectWifi() {
       const app = useAppStore()
       const res = await api.devices.connectWifi(this.wifi.host, Number(this.wifi.port) || 5555)
-      app.notify(res.message || (res.ok ? '已连接' : '连接失败'), res.ok ? 'success' : 'error')
+      app.notify(res.message || (res.ok ? t('action.connected') : t('action.connectFail')), res.ok ? 'success' : 'error')
       if (res.ok) await this.refresh()
       return res
     },
@@ -41,7 +44,7 @@ export const useDevicesStore = defineStore('devices', {
         mode,
         overrides
       })
-      app.notify(res.message || (res.ok ? '已启动' : '启动失败'), res.ok ? 'success' : 'error')
+      app.notify(res.message || (res.ok ? t('action.started') : t('action.startFail')), res.ok ? 'success' : 'error')
       if (res.ok) this.sessions = await api.scrcpy.list()
       return res
     },

@@ -1,9 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/ipc'
 import { useDevicesStore } from '@/stores/devices'
 import { useAppStore } from '@/stores/app'
 import ControlBar from '@/components/ControlBar.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   id: { type: String, required: true }
@@ -51,19 +54,19 @@ async function loadPackages() {
   try {
     const res = await api.device.listPackages(device.value.id)
     packages.value = res.packages || []
-    if (!res.ok) app.notify(res.message || '应用列表加载失败', 'error')
+    if (!res.ok) app.notify(res.message || t('action.appListFail'), 'error')
     if (packages.value.length) {
       try {
         const fn = api.device.appLabels
         if (typeof fn !== 'function') {
-          app.notify('应用名接口不可用，请重启应用', 'error')
+          app.notify(t('action.appNameUnavailable'), 'error')
         } else {
           fn(device.value.id, JSON.parse(JSON.stringify(packages.value))).then((r) => {
             if (r && r.labels) Object.assign(appLabels, r.labels)
-          }).catch((e) => app.notify('应用名解析失败：' + (e.message || e), 'error'))
+          }).catch((e) => app.notify(t('action.appNameParseFail') + (e.message || e), 'error'))
         }
       } catch (e) {
-        app.notify('应用名调用异常：' + (e.message || e), 'error')
+        app.notify(t('action.appNameCallFail') + (e.message || e), 'error')
       }
     }
   } finally {
@@ -81,17 +84,17 @@ async function openAlbum() {
       return
     }
   }
-  app.notify('未找到相册目录', 'info')
+  app.notify(t('action.albumNotFound'), 'info')
 }
 
 async function launchPackage(pkg) {
   const res = await api.device.launchPackage(device.value.id, pkg)
-  app.notify(res.ok ? `已启动 ${pkg}` : res.message || '启动失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.launched', { pkg }) : res.message || t('action.startFail'), res.ok ? 'success' : 'error')
 }
 
 async function uninstallPackage(pkg) {
   const res = await api.device.uninstall(device.value.id, pkg)
-  app.notify(res.ok ? `已卸载 ${pkg}` : res.message || '卸载失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.uninstalled', { pkg }) : res.message || t('action.uninstallFail'), res.ok ? 'success' : 'error')
   if (res.ok) loadPackages()
 }
 
@@ -102,7 +105,7 @@ async function loadFiles() {
   try {
     const res = await api.device.listFiles(device.value.id, filePath.value)
     fileEntries.value = res.entries || []
-    if (!res.ok) app.notify(res.message || '目录加载失败', 'error')
+    if (!res.ok) app.notify(res.message || t('action.dirLoadFail'), 'error')
     const images = fileEntries.value.filter((e) => !e.isDir && isImage(e.name)).slice(0, 300)
     let cursor = 0
     const loadNext = async () => {
@@ -130,10 +133,10 @@ async function pullFile(name) {
   const remotePath = `${filePath.value.replace(/\/$/, '')}/${name}`
   const res = await api.device.pull(device.value.id, remotePath)
   if (res.ok) {
-    app.notify(`已保存到 ${res.path}`, 'success')
+    app.notify(t('action.savedTo', { path: res.path }), 'success')
     api.app.showItem(res.path)
   } else {
-    app.notify(res.message || '拉取失败', 'error')
+    app.notify(res.message || t('action.pullFail'), 'error')
   }
 }
 
@@ -150,7 +153,7 @@ function selectAllFiles() {
 
 async function downloadSelected() {
   if (!selectedFiles.value.length) {
-    app.notify('请先勾选要下载的文件', 'info')
+    app.notify(t('action.selectFileFirst'), 'info')
     return
   }
   const targetDir = await api.app.pickDirectory()
@@ -159,7 +162,7 @@ async function downloadSelected() {
   try {
     const paths = selectedFiles.value.map((name) => `${filePath.value.replace(/\/$/, '')}/${name}`)
     const res = await api.device.pullBatch(device.value.id, paths, targetDir)
-    app.notify(res.message || (res.ok ? '下载完成' : '下载失败'), res.ok ? 'success' : 'error')
+    app.notify(res.message || (res.ok ? t('action.downloadDone') : t('action.downloadFail')), res.ok ? 'success' : 'error')
     if (res.ok) {
       api.app.showItem(targetDir)
       selectedFiles.value = []
@@ -174,24 +177,24 @@ async function pushFile() {
   if (!localPath) return
   const remotePath = `${filePath.value.replace(/\/$/, '')}/${localPath.split(/[\\/]/).pop()}`
   const res = await api.device.push(device.value.id, localPath, remotePath)
-  app.notify(res.ok ? '上传成功' : res.message || '上传失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.uploadSuccess') : res.message || t('action.uploadFail'), res.ok ? 'success' : 'error')
   if (res.ok) loadFiles()
 }
 
 async function runShell() {
   const res = await api.device.shell(device.value.id, shellCommand.value)
   shellOutput.value = res.output || res.message || ''
-  if (!res.ok) app.notify(res.message || '执行失败', 'error')
+  if (!res.ok) app.notify(res.message || t('action.execFail'), 'error')
 }
 
 async function installApp() {
   const filePath = await api.app.pickFile({
-    filters: [{ name: '安装包', extensions: ['apk', 'hap'] }]
+    filters: [{ name: t('action.installPkg'), extensions: ['apk', 'hap'] }]
   })
   if (!filePath) return
-  app.notify('安装中，请稍候…', 'info')
+  app.notify(t('action.installing'), 'info')
   const res = await api.device.install(device.value.id, filePath)
-  app.notify(res.ok ? '安装成功' : res.message || '安装失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.installSuccess') : res.message || t('action.installFail'), res.ok ? 'success' : 'error')
 }
 
 async function startMode(mode) {
@@ -199,7 +202,7 @@ async function startMode(mode) {
   await store.startMirror(device.value, mode, overrides)
 }
 
-const platformLabel = { android: 'Android', harmonyos: '鸿蒙' }
+const platformLabel = computed(() => ({ android: 'Android', harmonyos: t('device.harmonyos') }))
 const canMirror = computed(() => device.value?.state === 'device')
 </script>
 
@@ -212,85 +215,85 @@ const canMirror = computed(() => device.value?.state === 'device')
           <span class="chip blue">{{ platformLabel[device.platform] }}</span>
           <span class="chip">{{ device.connection === 'wifi' ? 'WiFi' : 'USB' }}</span>
           <span class="chip" :class="device.state === 'device' ? 'green' : 'red'">
-            {{ device.state === 'device' ? '在线' : '离线' }}
+            {{ device.state === 'device' ? t('device.online') : t('device.offline') }}
           </span>
           <span class="mono muted" style="margin-left: 4px">{{ device.serial }}</span>
         </p>
       </div>
-      <router-link to="/" class="btn ghost">← 返回设备列表</router-link>
+      <router-link to="/" class="btn ghost">{{ t('device.backToList') }}</router-link>
     </div>
 
     <div class="card">
-      <div class="card-title">投屏模式</div>
+      <div class="card-title">{{ t('device.castMode') }}</div>
       <div class="row">
-        <button class="btn primary" :disabled="!canMirror" @click="startMode('mirror')">镜像</button>
-        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('record')">录制视频</button>
-        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('camera')">相机镜像</button>
-        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('otg')">OTG 模式</button>
+        <button class="btn primary" :disabled="!canMirror" @click="startMode('mirror')">{{ t('modes.mirror') }}</button>
+        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('record')">{{ t('modes.recordVideo') }}</button>
+        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('camera')">{{ t('modes.cameraMirror') }}</button>
+        <button class="btn" :disabled="!canMirror || device.platform !== 'android'" @click="startMode('otg')">{{ t('modes.otgMode') }}</button>
       </div>
       <div class="row flexible-row">
-        <input v-model="flexibleArgs" class="input mono" placeholder="灵活启动：自定义 scrcpy 参数，如 --turn-screen-off --stay-awake" />
-        <button class="btn" :disabled="!canMirror" @click="startMode('flexible')">灵活启动</button>
+        <input v-model="flexibleArgs" class="input mono" :placeholder="t('device.flexibleDesc')" />
+        <button class="btn" :disabled="!canMirror" @click="startMode('flexible')">{{ t('device.flexibleLaunch') }}</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">设备交互</div>
+      <div class="card-title">{{ t('device.deviceInteraction') }}</div>
       <ControlBar :device-id="device.id" :disabled="device.state !== 'device'" />
     </div>
 
     <div class="card">
       <div class="card-title">
-        <span>应用管理</span>
+        <span>{{ t('device.appManage') }}</span>
         <span class="muted" style="font-size: 12px; font-weight: 400">
-          {{ device.platform === 'android' ? `共 ${packages.length} 个第三方应用` : '该平台建设中' }}
+          {{ device.platform === 'android' ? t('device.appCount', { count: packages.length }) : t('device.platformWip') }}
         </span>
       </div>
       <div class="row" style="margin-bottom: 12px">
-        <button class="btn small" @click="loadPackages">刷新</button>
-        <button class="btn small" @click="installApp">安装应用</button>
+        <button class="btn small" @click="loadPackages">{{ t('home.refresh') }}</button>
+        <button class="btn small" @click="installApp">{{ t('home.installApp') }}</button>
       </div>
-      <div v-if="packagesLoading" class="muted">加载中…</div>
+      <div v-if="packagesLoading" class="muted">{{ t('device.loading') }}</div>
       <div v-else-if="packages.length" class="list-box">
         <div v-for="pkg in packages" :key="pkg" class="list-row">
           <div class="app-info">
             <span class="app-name">{{ appLabels[pkg] || pkg }}</span>
             <span class="mono app-pkg">{{ pkg }}</span>
           </div>
-          <button class="btn small" @click="launchPackage(pkg)">启动</button>
-          <button class="btn danger small" @click="uninstallPackage(pkg)">卸载</button>
+          <button class="btn small" @click="launchPackage(pkg)">{{ t('device.launch') }}</button>
+          <button class="btn danger small" @click="uninstallPackage(pkg)">{{ t('device.uninstall') }}</button>
         </div>
       </div>
-      <div v-else class="muted" style="padding: 10px 0">暂无数据</div>
+      <div v-else class="muted" style="padding: 10px 0">{{ t('device.noData') }}</div>
     </div>
 
     <div class="card">
       <div class="card-title">
-        <span>文件管理</span>
+        <span>{{ t('device.fileManage') }}</span>
         <div class="view-switch">
-          <button :class="{ on: fileView === 'list' }" @click="fileView = 'list'">列表</button>
-          <button :class="{ on: fileView === 'grid' }" @click="fileView = 'grid'">缩略图</button>
+          <button :class="{ on: fileView === 'list' }" @click="fileView = 'list'">{{ t('device.listView') }}</button>
+          <button :class="{ on: fileView === 'grid' }" @click="fileView = 'grid'">{{ t('device.thumbView') }}</button>
         </div>
       </div>
       <div class="row" style="margin-bottom: 12px">
         <input v-model="filePath" class="input mono" style="flex: 1" @keyup.enter="loadFiles" />
-        <button class="btn small" @click="loadFiles">打开</button>
-        <button class="btn small" @click="openAlbum">相册</button>
-        <button class="btn small" @click="pushFile">上传文件</button>
+        <button class="btn small" @click="loadFiles">{{ t('device.open') }}</button>
+        <button class="btn small" @click="openAlbum">{{ t('device.album') }}</button>
+        <button class="btn small" @click="pushFile">{{ t('device.uploadFile') }}</button>
       </div>
 
       <div v-if="fileEntries.length" class="batch-bar">
         <label class="check-all">
           <input type="checkbox" :checked="selectedFiles.length && selectedFiles.length === fileEntries.filter(e => !e.isDir).length" @change="selectAllFiles" />
-          全选
+          {{ t('device.selectAll') }}
         </label>
-        <span class="muted" style="font-size: 12px">已选 {{ selectedFiles.length }} 项</span>
+        <span class="muted" style="font-size: 12px">{{ t('device.selectedCount', { count: selectedFiles.length }) }}</span>
         <button class="btn primary small" :disabled="!selectedFiles.length || downloading" @click="downloadSelected">
-          {{ downloading ? '下载中…' : '批量下载' }}
+          {{ downloading ? t('device.downloading') : t('device.batchDownload') }}
         </button>
       </div>
 
-      <div v-if="fileLoading" class="muted">加载中…</div>
+      <div v-if="fileLoading" class="muted">{{ t('device.loading') }}</div>
 
       <!-- 列表视图 -->
       <div v-else-if="fileEntries.length && fileView === 'list'" class="list-box">
@@ -304,7 +307,7 @@ const canMirror = computed(() => device.value?.state === 'device')
           <span class="mono" style="flex: 1; cursor: pointer" @click="entry.isDir && enterDir(entry.name)">
             {{ entry.name }}
           </span>
-          <button v-if="!entry.isDir" class="btn small" @click="pullFile(entry.name)">下载</button>
+          <button v-if="!entry.isDir" class="btn small" @click="pullFile(entry.name)">{{ t('device.download') }}</button>
         </div>
       </div>
 
@@ -313,7 +316,7 @@ const canMirror = computed(() => device.value?.state === 'device')
         <div v-for="entry in fileEntries" :key="entry.name" class="thumb-item" :class="{ picked: selectedFiles.includes(entry.name) }">
           <div class="thumb-box" @click="entry.isDir ? enterDir(entry.name) : (!isImage(entry.name) && toggleSelect(entry.name))">
             <img v-if="!entry.isDir && isImage(entry.name) && thumbs[entry.name]" :src="thumbs[entry.name]" />
-            <div v-else class="thumb-ph">{{ entry.isDir ? '文件夹' : (isImage(entry.name) ? '图片' : '文件') }}</div>
+            <div v-else class="thumb-ph">{{ entry.isDir ? t('device.folder') : (isImage(entry.name) ? t('device.image') : t('device.file')) }}</div>
             <input
               v-if="!entry.isDir" type="checkbox" class="thumb-check"
               :checked="selectedFiles.includes(entry.name)" @click.stop="toggleSelect(entry.name)"
@@ -323,23 +326,23 @@ const canMirror = computed(() => device.value?.state === 'device')
         </div>
       </div>
 
-      <div v-else class="muted" style="padding: 10px 0">暂无数据</div>
+      <div v-else class="muted" style="padding: 10px 0">{{ t('device.noData') }}</div>
     </div>
 
     <div class="card">
-      <div class="card-title">执行脚本</div>
+      <div class="card-title">{{ t('device.runScript') }}</div>
       <div class="row" style="margin-bottom: 12px">
-        <input v-model="shellCommand" class="input mono" style="flex: 1" placeholder="输入设备 shell 命令" @keyup.enter="runShell" />
-        <button class="btn primary small" @click="runShell">执行</button>
+        <input v-model="shellCommand" class="input mono" style="flex: 1" :placeholder="t('device.shellPlaceholder')" @keyup.enter="runShell" />
+        <button class="btn primary small" @click="runShell">{{ t('device.execute') }}</button>
       </div>
-      <pre class="terminal">{{ shellOutput || '执行结果将显示在这里' }}</pre>
+      <pre class="terminal">{{ shellOutput || t('device.executeResultHint') }}</pre>
     </div>
   </div>
 
   <div v-else class="empty">
     <div class="empty-icon">?</div>
-    <div>未找到设备</div>
-    <router-link to="/" class="btn" style="margin-top: 16px">返回设备列表</router-link>
+    <div>{{ t('device.notFound') }}</div>
+    <router-link to="/" class="btn" style="margin-top: 16px">{{ t('device.backToListPlain') }}</router-link>
   </div>
 </template>
 

@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { api } from '@/utils/ipc'
 import logoUrl from '@/assets/logo.png'
 
+const { t } = useI18n()
 const route = useRoute()
 const app = useAppStore()
 
@@ -20,11 +22,11 @@ async function checkForUpdate() {
   try {
     const r = await api.app.checkUpdate()
     if (!r || !r.ok) {
-      app.notify('检查更新失败，请稍后重试', 'error')
+      app.notify(t('app.checkFailed'), 'error')
       return
     }
     updateInfo.value = r
-    if (!r.hasUpdate) app.notify(`已是最新版本 v${r.current}`, 'success')
+    if (!r.hasUpdate) app.notify(t('app.latestVersion', { version: r.current }), 'success')
   } finally {
     checking.value = false
   }
@@ -35,16 +37,16 @@ function downloadUpdate() {
     api.app.openDownload(updateInfo.value.packageUrl)
     updateInfo.value = null
   } else {
-    app.notify('暂未提供下载地址，可加入 QQ 群获取', 'info')
+    app.notify(t('app.noDownload'), 'info')
   }
 }
 
-const navs = [
-  { path: '/', label: '设备' },
-  { path: '/settings', label: '设置' }
-]
+const navs = computed(() => [
+  { path: '/', label: t('app.device') },
+  { path: '/settings', label: t('app.settings') }
+])
 
-const themeLabel = computed(() => ({ dark: '深色', light: '浅色', system: '跟随系统' })[app.theme] || '深色')
+const themeLabel = computed(() => t(`app.theme${app.theme.charAt(0).toUpperCase()}${app.theme.slice(1)}`))
 
 function isActive(path) {
   if (path === '/') return route.path === '/'
@@ -60,14 +62,14 @@ onMounted(() => {
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <img class="brand-logo" :src="logoUrl" alt="星点投屏" />
+        <img class="brand-logo" :src="logoUrl" :alt="t('app.name')" />
         <div>
-          <div class="brand-name">星点投屏</div>
-          <div class="brand-sub">一键投屏 · 轻松掌控</div>
+          <div class="brand-name">{{ t('app.name') }}</div>
+          <div class="brand-sub">{{ t('app.tagline') }}</div>
         </div>
       </div>
 
-      <div class="nav-label">主菜单</div>
+      <div class="nav-label">{{ t('app.mainMenu') }}</div>
       <router-link
         v-for="nav in navs"
         :key="nav.path"
@@ -81,24 +83,24 @@ onMounted(() => {
       <div style="flex: 1"></div>
 
       <button class="qq-group" @click="openQQ">
-        <span class="qq-label">加入 QQ 群</span>
-        <span class="qq-sub">交流 · 反馈 · 更新</span>
+        <span class="qq-label">{{ t('app.joinQQ') }}</span>
+        <span class="qq-sub">{{ t('app.qqSub') }}</span>
       </button>
 
       <button class="check-update-btn" :disabled="checking" @click="checkForUpdate">
-        {{ checking ? '检查中…' : `检查更新 · v${app.appInfo?.version || ''}` }}
+        {{ checking ? t('app.checking') : t('app.checkUpdateVersion', { version: app.appInfo?.version || '' }) }}
       </button>
 
       <div class="theme-box">
-        <div class="theme-title">外观主题</div>
+        <div class="theme-title">{{ t('app.theme') }}</div>
         <div class="theme-options">
           <button
-            v-for="t in ['dark', 'light', 'system']"
-            :key="t"
+            v-for="tt in ['dark', 'light', 'system']"
+            :key="tt"
             class="theme-opt"
-            :class="{ on: app.theme === t }"
-            @click="app.setTheme(t)"
-          >{{ { dark: '深色', light: '浅色', system: '自动' }[t] }}</button>
+            :class="{ on: app.theme === tt }"
+            @click="app.setTheme(tt)"
+          >{{ t(`app.theme${tt.charAt(0).toUpperCase()}${tt.slice(1)}`) }}</button>
         </div>
       </div>
     </aside>
@@ -115,12 +117,12 @@ onMounted(() => {
 
     <div v-if="updateInfo && updateInfo.hasUpdate" class="update-mask" @click.self="updateInfo = null">
       <div class="update-card">
-        <h2>发现新版本</h2>
+        <h2>{{ t('app.newVersion') }}</h2>
         <div class="update-ver">v{{ updateInfo.current }} → v{{ updateInfo.version }}</div>
         <div v-if="updateInfo.notes" class="update-notes">{{ updateInfo.notes }}</div>
         <div class="update-actions">
-          <button class="btn ghost" @click="updateInfo = null">稍后</button>
-          <button class="btn primary" @click="downloadUpdate">下载更新</button>
+          <button class="btn ghost" @click="updateInfo = null">{{ t('app.later') }}</button>
+          <button class="btn primary" @click="downloadUpdate">{{ t('app.downloadUpdate') }}</button>
         </div>
       </div>
     </div>

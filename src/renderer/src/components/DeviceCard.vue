@@ -1,7 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useDevicesStore } from '@/stores/devices'
+
+const { t } = useI18n()
 
 const props = defineProps({
   device: { type: Object, required: true },
@@ -30,19 +33,19 @@ function openDetail() {
       <div class="dev-name-line">
         <span class="dev-name">{{ device.name }}</span>
         <span v-if="device.connection === 'wifi'" class="dev-tag">WiFi</span>
-        <span v-if="activeSessions.length" class="dev-tag live">投屏中</span>
+        <span v-if="activeSessions.length" class="dev-tag live">{{ t('home.casting') }}</span>
       </div>
       <div class="dev-id mono">{{ device.serial }}</div>
     </div>
 
     <span class="dev-state" :class="online ? 'on' : 'off'">
       <span class="state-dot"></span>
-      {{ online ? '已连接' : '已离线' }}
+      {{ online ? t('home.connected') : t('home.offline') }}
     </span>
 
     <div class="dev-actions">
-      <button class="text-btn" @click.stop="openDetail">详情</button>
-      <button class="text-btn danger" @click.stop="emit('remove', device)">移除</button>
+      <button class="text-btn" @click.stop="openDetail">{{ t('device.detail') }}</button>
+      <button class="text-btn danger" @click.stop="emit('remove', device)">{{ t('device.remove') }}</button>
     </div>
   </div>
 </template>

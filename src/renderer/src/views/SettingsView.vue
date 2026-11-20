@@ -1,233 +1,179 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/ipc'
 import { useSettingsStore } from '@/stores/settings'
+import { setAppLocale, SUPPORTED_LOCALES } from '@/i18n'
 import SettingField from '@/components/SettingField.vue'
 
+const { t } = useI18n()
 const settings = useSettingsStore()
 const frameModels = ref([])
 const activeSection = ref('general')
 
-const sections = [
+const tr = (v) => (typeof v === 'string' && v.startsWith('@') ? t(v.slice(1)) : v)
+
+const sectionsDef = [
   {
     key: 'general',
-    title: '通用',
+    title: '@settings.general',
     fields: [
-      {
-        key: 'theme',
-        label: '主题',
-        type: 'select',
-        options: [
-          { value: 'dark', label: '深色' },
-          { value: 'light', label: '浅色' },
-          { value: 'system', label: '跟随系统' }
-        ]
-      },
-      { key: 'storagePath', label: '文件存储路径', type: 'path', kind: 'directory', placeholder: '默认为视频/图片目录下「星点投屏」' },
-      { key: 'adbPath', label: 'ADB 路径', type: 'path', kind: 'file', placeholder: '留空自动查找' },
-      { key: 'scrcpyPath', label: 'Scrcpy 路径', type: 'path', kind: 'file', placeholder: '留空自动查找' },
-      { key: 'hdcPath', label: 'HDC 路径（鸿蒙）', type: 'path', kind: 'file', placeholder: '留空自动查找' },
-      { key: 'gnirehtetPath', label: 'Gnirehtet 路径', type: 'path', kind: 'file', placeholder: '留空自动查找' },
-      { key: 'scrcpyExtraArgs', label: 'Scrcpy 附加参数', type: 'text', placeholder: '如 --turn-screen-off' },
-      { key: 'autoConnect', label: '自动连接设备', hint: '应用启动时自动连接历史设备', type: 'toggle' },
-      { key: 'autoMirror', label: '自动执行镜像', hint: '设备接入后自动开始投屏', type: 'toggle' },
-      { key: 'floatingControlBar', label: '浮动控制栏', hint: '投屏时显示独立浮动控制条', type: 'toggle' },
-      { key: 'debug', label: '调试模式', type: 'toggle' }
+      { key: 'language', label: '@settings.language', type: 'select', options: SUPPORTED_LOCALES.map((l) => ({ value: l, label: '@lang.' + l })) },
+      { key: 'theme', label: '@settings.theme', type: 'select', options: [
+        { value: 'dark', label: '@app.themeDark' }, { value: 'light', label: '@app.themeLight' }, { value: 'system', label: '@app.themeSystem' }
+      ] },
+      { key: 'storagePath', label: '@settings.storagePath', type: 'path', kind: 'directory', placeholder: '@settings.storagePathHint' },
+      { key: 'adbPath', label: '@settings.adbPath', type: 'path', kind: 'file', placeholder: '@settings.autoFind' },
+      { key: 'scrcpyPath', label: '@settings.scrcpyPath', type: 'path', kind: 'file', placeholder: '@settings.autoFind' },
+      { key: 'hdcPath', label: '@settings.hdcPath', type: 'path', kind: 'file', placeholder: '@settings.autoFind' },
+      { key: 'gnirehtetPath', label: '@settings.gnirehtetPath', type: 'path', kind: 'file', placeholder: '@settings.autoFind' },
+      { key: 'scrcpyExtraArgs', label: '@settings.extraArgs', type: 'text', placeholder: '@settings.extraArgsHint' },
+      { key: 'autoConnect', label: '@settings.autoConnect', hint: '@settings.autoConnectHint', type: 'toggle' },
+      { key: 'autoMirror', label: '@settings.autoMirror', hint: '@settings.autoMirrorHint', type: 'toggle' },
+      { key: 'floatingControlBar', label: '@settings.floatingBar', hint: '@settings.floatingBarHint', type: 'toggle' },
+      { key: 'debug', label: '@settings.debugMode', type: 'toggle' }
     ]
   },
   {
     key: 'video',
-    title: '视频',
+    title: '@settings.video',
     fields: [
-      { key: 'enabled', label: '视频转发', type: 'toggle' },
-      { key: 'maxSize', label: '最大尺寸', hint: '按长边缩放，0 为不缩放', type: 'number' },
-      { key: 'bitRate', label: '视频码率', type: 'text', placeholder: '8M' },
-      { key: 'fps', label: '最大帧率', type: 'number' },
-      {
-        key: 'codec',
-        label: '视频编码',
-        type: 'select',
-        options: [
-          { value: 'h264', label: 'H.264' },
-          { value: 'h265', label: 'H.265' },
-          { value: 'av1', label: 'AV1' }
-        ]
-      },
-      {
-        key: 'orientation',
-        label: '显示方向',
-        type: 'select',
-        options: [
-          { value: '0', label: '自然' },
-          { value: '1', label: '90°' },
-          { value: '2', label: '180°' },
-          { value: '3', label: '270°' }
-        ]
-      },
-      { key: 'crop', label: '屏幕裁剪', type: 'text', placeholder: '宽:高:x:y' },
-      { key: 'displayId', label: '显示器 ID', type: 'text', placeholder: '留空使用默认' },
-      { key: 'bufferMs', label: '视频缓冲 (ms)', type: 'number' },
-      { key: 'v4l2BufferMs', label: 'v4l2 缓冲 (ms)', type: 'number' }
+      { key: 'enabled', label: '@settings.videoForward', type: 'toggle' },
+      { key: 'maxSize', label: '@settings.maxSize', hint: '@settings.maxSizeHint', type: 'number' },
+      { key: 'bitRate', label: '@settings.videoBitrate', type: 'text', placeholder: '8M' },
+      { key: 'fps', label: '@settings.maxFps', type: 'number' },
+      { key: 'codec', label: '@settings.videoCodec', type: 'select', options: [
+        { value: 'h264', label: 'H.264' }, { value: 'h265', label: 'H.265' }, { value: 'av1', label: 'AV1' }
+      ] },
+      { key: 'orientation', label: '@settings.displayOrientation', type: 'select', options: [
+        { value: '0', label: '@settings.natural' }, { value: '1', label: '90°' }, { value: '2', label: '180°' }, { value: '3', label: '270°' }
+      ] },
+      { key: 'crop', label: '@settings.crop', type: 'text', placeholder: '@settings.ratioPlaceholder' },
+      { key: 'displayId', label: '@settings.displayId', type: 'text', placeholder: '@settings.displayIdHint' },
+      { key: 'bufferMs', label: '@settings.videoBuffer', type: 'number' },
+      { key: 'v4l2BufferMs', label: '@settings.v4l2Buffer', type: 'number' }
     ]
   },
   {
     key: 'audio',
-    title: '音频',
+    title: '@settings.audio',
     fields: [
-      { key: 'enabled', label: '音频转发', type: 'toggle' },
-      {
-        key: 'source',
-        label: '音频源',
-        type: 'select',
-        options: [
-          { value: 'output', label: '设备输出（扬声器）' },
-          { value: 'mic', label: '麦克风' },
-          { value: 'playback', label: '应用回放' }
-        ]
-      },
-      {
-        key: 'codec',
-        label: '音频编码',
-        type: 'select',
-        options: [
-          { value: 'opus', label: 'Opus' },
-          { value: 'aac', label: 'AAC' },
-          { value: 'flac', label: 'FLAC' },
-          { value: 'raw', label: 'Raw' }
-        ]
-      },
-      { key: 'bitRate', label: '音频码率', type: 'text', placeholder: '128k' },
-      { key: 'bufferMs', label: '音频缓冲 (ms)', type: 'number' },
-      { key: 'outputBufferMs', label: '音频输出缓冲 (ms)', type: 'number' }
+      { key: 'enabled', label: '@settings.audioForward', type: 'toggle' },
+      { key: 'source', label: '@settings.audioSource', type: 'select', options: [
+        { value: 'output', label: '@settings.deviceAudio' }, { value: 'mic', label: '@settings.microphone' }, { value: 'playback', label: '@settings.appAudio' }
+      ] },
+      { key: 'codec', label: '@settings.audioCodec', type: 'select', options: [
+        { value: 'opus', label: 'Opus' }, { value: 'aac', label: 'AAC' }, { value: 'flac', label: 'FLAC' }, { value: 'raw', label: 'Raw' }
+      ] },
+      { key: 'bitRate', label: '@settings.audioBitrate', type: 'text', placeholder: '128k' },
+      { key: 'bufferMs', label: '@settings.audioBuffer', type: 'number' },
+      { key: 'outputBufferMs', label: '@settings.audioOutBuffer', type: 'number' }
     ]
   },
   {
     key: 'window',
-    title: '窗口',
+    title: '@settings.window',
     fields: [
-      { key: 'width', label: '窗口宽度', type: 'number' },
-      { key: 'height', label: '窗口高度', type: 'number' },
-      { key: 'x', label: '窗口横坐标', hint: '-1 为居中', type: 'number' },
-      { key: 'y', label: '窗口纵坐标', hint: '-1 为居中', type: 'number' },
-      { key: 'borderless', label: '无边框模式', type: 'toggle' },
-      { key: 'fullscreen', label: '全屏模式', type: 'toggle' },
-      { key: 'alwaysOnTop', label: '始终置顶', type: 'toggle' },
-      { key: 'disableScreensaver', label: '禁用屏幕保护', type: 'toggle' }
+      { key: 'width', label: '@settings.windowWidth', type: 'number' },
+      { key: 'height', label: '@settings.windowHeight', type: 'number' },
+      { key: 'x', label: '@settings.windowX', hint: '@settings.centerHint', type: 'number' },
+      { key: 'y', label: '@settings.windowY', hint: '@settings.centerHint', type: 'number' },
+      { key: 'borderless', label: '@settings.noBorder', type: 'toggle' },
+      { key: 'fullscreen', label: '@settings.fullscreen', type: 'toggle' },
+      { key: 'alwaysOnTop', label: '@settings.alwaysTop', type: 'toggle' },
+      { key: 'disableScreensaver', label: '@settings.disableScreensaver', type: 'toggle' }
     ]
   },
   {
     key: 'device',
-    title: '设备行为',
+    title: '@settings.behavior',
     fields: [
-      { key: 'showTouches', label: '展示触摸点', type: 'toggle' },
-      { key: 'stayAwake', label: '保持唤醒', type: 'toggle' },
-      { key: 'powerOffOnClose', label: '控制结束关闭屏幕', type: 'toggle' }
+      { key: 'showTouches', label: '@settings.showTouches', type: 'toggle' },
+      { key: 'stayAwake', label: '@settings.keepAwake', type: 'toggle' },
+      { key: 'powerOffOnClose', label: '@settings.screenOff', type: 'toggle' }
     ]
   },
   {
     key: 'input',
-    title: '输入',
+    title: '@settings.input',
     fields: [
-      {
-        key: 'mouseMode',
-        label: '鼠标模式',
-        type: 'select',
-        options: [
-          { value: 'sdk', label: 'SDK' },
-          { value: 'uhid', label: 'UHID' },
-          { value: 'aoa', label: 'AOA' }
-        ]
-      },
-      { key: 'mouseBind', label: '鼠标绑定', hint: '如 bhsn（左/右/中/侧键）', type: 'text' },
-      {
-        key: 'keyboardMode',
-        label: '键盘模式',
-        hint: '中文输入推荐 uhid',
-        type: 'select',
-        options: [
-          { value: 'sdk', label: 'SDK' },
-          { value: 'uhid', label: 'UHID（中文输入）' },
-          { value: 'aoa', label: 'AOA' }
-        ]
-      },
-      {
-        key: 'gamepad',
-        label: '游戏手柄',
-        type: 'select',
-        options: [
-          { value: 'disabled', label: '禁用' },
-          { value: 'sdk', label: 'SDK' },
-          { value: 'uhid', label: 'UHID' },
-          { value: 'aoa', label: 'AOA' }
-        ]
-      }
+      { key: 'mouseMode', label: '@settings.mouseMode', type: 'select', options: [
+        { value: 'sdk', label: 'SDK' }, { value: 'uhid', label: 'UHID' }, { value: 'aoa', label: 'AOA' }
+      ] },
+      { key: 'mouseBind', label: '@settings.mouseBind', hint: '@settings.bindHint', type: 'text' },
+      { key: 'keyboardMode', label: '@settings.keyboardMode', hint: '@settings.uhidHint', type: 'select', options: [
+        { value: 'sdk', label: 'SDK' }, { value: 'uhid', label: '@settings.uhid' }, { value: 'aoa', label: 'AOA' }
+      ] },
+      { key: 'gamepad', label: '@settings.gamepad', type: 'select', options: [
+        { value: 'disabled', label: '@settings.disabled' }, { value: 'sdk', label: 'SDK' }, { value: 'uhid', label: 'UHID' }, { value: 'aoa', label: 'AOA' }
+      ] }
     ]
   },
   {
     key: 'record',
-    title: '录制',
+    title: '@settings.recording',
     fields: [
-      {
-        key: 'format',
-        label: '录制格式',
-        type: 'select',
-        options: [
-          { value: 'mp4', label: 'MP4' },
-          { value: 'mkv', label: 'MKV' }
-        ]
-      },
-      {
-        key: 'orientation',
-        label: '录制方向',
-        type: 'select',
-        options: [
-          { value: '0', label: '自然' },
-          { value: '1', label: '90°' },
-          { value: '2', label: '180°' },
-          { value: '3', label: '270°' }
-        ]
-      },
-      { key: 'durationSec', label: '录制时长 (秒)', hint: '0 为不限制', type: 'number' },
-      { key: 'noPlayback', label: '录制时禁用播放', type: 'toggle' },
-      { key: 'noAudioPlayback', label: '录制时禁用音频播放', type: 'toggle' }
+      { key: 'format', label: '@settings.recordFormat', type: 'select', options: [
+        { value: 'mp4', label: 'MP4' }, { value: 'mkv', label: 'MKV' }
+      ] },
+      { key: 'orientation', label: '@settings.recordOrientation', type: 'select', options: [
+        { value: '0', label: '@settings.natural' }, { value: '1', label: '90°' }, { value: '2', label: '180°' }, { value: '3', label: '270°' }
+      ] },
+      { key: 'durationSec', label: '@settings.duration', hint: '@settings.noLimitHint', type: 'number' },
+      { key: 'noPlayback', label: '@settings.recordNoPlay', type: 'toggle' },
+      { key: 'noAudioPlayback', label: '@settings.recordNoAudio', type: 'toggle' }
     ]
   },
   {
     key: 'camera',
-    title: '摄像',
+    title: '@settings.cameraCapture',
     fields: [
-      { key: 'size', label: '摄像尺寸', type: 'text', placeholder: '如 1920x1080' },
-      {
-        key: 'facing',
-        label: '摄像头朝向',
-        type: 'select',
-        options: [
-          { value: 'front', label: '前置' },
-          { value: 'back', label: '后置' },
-          { value: 'external', label: '外接' }
-        ]
-      },
-      { key: 'fps', label: '摄像帧率', type: 'number' }
+      { key: 'size', label: '@settings.cameraSize', type: 'text', placeholder: '@settings.cameraSizeHint' },
+      { key: 'facing', label: '@settings.cameraFacing', type: 'select', options: [
+        { value: 'front', label: '@settings.front' }, { value: 'back', label: '@settings.back' }, { value: 'external', label: '@settings.external' }
+      ] },
+      { key: 'fps', label: '@settings.cameraFps', type: 'number' }
     ]
   },
   {
     key: 'frame',
-    title: '机型边框',
+    title: '@settings.frame',
     fields: [
-      { key: 'enabled', label: '启用机型边框', hint: '投屏窗口外显示手机外壳', type: 'toggle' },
-      { key: 'model', label: '边框样式', type: 'select', options: [] },
-      { key: 'opacity', label: '边框透明度', hint: '0.1 ~ 1', type: 'number' }
+      { key: 'enabled', label: '@settings.enableFrame', hint: '@settings.frameOutside', type: 'toggle' },
+      { key: 'model', label: '@settings.frameStyle', type: 'select', options: [] },
+      { key: 'opacity', label: '@settings.frameOpacity', hint: '0.1 ~ 1', type: 'number' }
     ]
   }
 ]
 
-const current = () => sections.find((s) => s.key === activeSection.value) || sections[0]
+const sections = computed(() => sectionsDef.map((s) => ({
+  ...s,
+  title: tr(s.title),
+  fields: s.fields.map((f) => ({
+    ...f,
+    label: tr(f.label),
+    hint: tr(f.hint),
+    placeholder: tr(f.placeholder),
+    options: (f.options || []).map((o) => ({ ...o, label: tr(o.label) }))
+  }))
+})))
+
+const current = () => sections.value.find((s) => s.key === activeSection.value) || sections.value[0]
 
 function fieldOptions(sectionKey, field) {
   if (sectionKey === 'frame' && field.key === 'model') {
     return frameModels.value.map((m) => ({ value: m.id, label: m.name }))
   }
   return field.options || []
+}
+
+function onFieldUpdate(field, value) {
+  if (current().key === 'general' && field.key === 'language') {
+    settings.patch('general', 'language', value)
+    setAppLocale(value)
+  } else {
+    settings.patch(current().key, field.key, value)
+  }
 }
 
 onMounted(async () => {
@@ -244,8 +190,8 @@ onMounted(async () => {
   <div class="page">
     <div class="page-head">
       <div>
-        <h1 class="page-title">设置</h1>
-        <p class="page-desc">调整投屏画质、窗口、输入与外观偏好</p>
+        <h1 class="page-title">{{ t('app.settings') }}</h1>
+        <p class="page-desc">{{ t('settings.appearanceDesc') }}</p>
       </div>
     </div>
 
@@ -272,22 +218,22 @@ onMounted(async () => {
           :placeholder="field.placeholder"
           :options="fieldOptions(current().key, field)"
           :model-value="settings.data[current().key][field.key]"
-          @update:model-value="settings.patch(current().key, field.key, $event)"
+          @update:model-value="onFieldUpdate(field, $event)"
         />
       </div>
 
       <div class="save-bar">
         <button class="btn primary" :disabled="settings.saving" @click="settings.save()">
-          {{ settings.saving ? '保存中…' : '保存设置' }}
+          {{ settings.saving ? t('settings.saving') : t('settings.save') }}
         </button>
-        <button class="btn danger" @click="settings.reset()">恢复默认</button>
+        <button class="btn danger" @click="settings.reset()">{{ t('settings.reset') }}</button>
         <span class="muted" style="font-size: 12px">
-          修改配置文件前请先彻底退出应用
+          {{ t('action.exitBeforeConfig') }}
         </span>
       </div>
     </template>
 
-    <div v-else class="muted">加载中…</div>
+    <div v-else class="muted">{{ t('device.loading') }}</div>
   </div>
 </template>
 

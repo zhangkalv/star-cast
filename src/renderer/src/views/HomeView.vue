@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/ipc'
 import { useDevicesStore } from '@/stores/devices'
 import { useAppStore } from '@/stores/app'
 import DeviceCard from '@/components/DeviceCard.vue'
 
+const { t } = useI18n()
 const store = useDevicesStore()
 const app = useAppStore()
 const selectedId = ref(null)
@@ -37,11 +39,11 @@ onMounted(async () => {
     const normal = payload.code === 0 || payload.code == null || !payload.message
     let text
     if (payload.mode === 'record' && normal) {
-      text = '录制已完成'
+      text = t('action.recordDone')
     } else if (normal) {
-      text = '投屏已结束'
+      text = t('action.castEnded')
     } else {
-      text = `投屏中断${payload.message ? `：${payload.message.slice(0, 80)}` : ''}`
+      text = payload.message ? t('action.castInterrupted', { message: '：' + payload.message.slice(0, 80) }) : t('action.castInterrupted', { message: '' })
     }
     app.notify(text, normal ? 'info' : 'error')
     store.refresh()
@@ -59,7 +61,7 @@ function select(device) {
 
 async function removeDevice(device) {
   const res = await api.devices.disconnect(device.id)
-  app.notify(res.ok ? '设备已移除' : res.message || '移除失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.deviceRemoved') : res.message || t('action.removeFail'), res.ok ? 'success' : 'error')
   if (res.ok && selectedId.value === device.id) selectedId.value = null
   await store.refresh()
 }
@@ -73,25 +75,25 @@ async function act(fn, okMsg, failMsg) {
 }
 
 const keyActions = [
-  { label: '返回', key: 'back' },
-  { label: '主页', key: 'home' },
-  { label: '任务', key: 'recents' },
-  { label: '电源', key: 'power' },
-  { label: '锁屏', key: 'sleep' },
-  { label: '音量+', key: 'volumeUp' },
-  { label: '音量-', key: 'volumeDown' },
-  { label: '菜单', key: 'menu' }
+  { label: 'keys.back', key: 'back' },
+  { label: 'keys.home', key: 'home' },
+  { label: 'keys.recents', key: 'recents' },
+  { label: 'keys.power', key: 'power' },
+  { label: 'keys.sleep', key: 'sleep' },
+  { label: 'keys.volumeUp', key: 'volumeUp' },
+  { label: 'keys.volumeDown', key: 'volumeDown' },
+  { label: 'keys.menu', key: 'menu' }
 ]
 
 function pressKey(key) {
-  act((id) => api.control.key(id, key), '', '操作失败')
+  act((id) => api.control.key(id, key), '', t('action.opFail'))
 }
 
 const mirrorActions = [
-  { label: '镜像', mode: 'mirror' },
-  { label: '录制', mode: 'record' },
-  { label: '相机', mode: 'camera' },
-  { label: 'OTG', mode: 'otg' }
+  { label: 'modes.mirror', mode: 'mirror' },
+  { label: 'modes.record', mode: 'record' },
+  { label: 'modes.camera', mode: 'camera' },
+  { label: 'modes.otg', mode: 'otg' }
 ]
 
 async function startMirror(mode) {
@@ -106,13 +108,13 @@ async function screenshot() {
   if (!d) return
   const res = await api.device.screenshot(d.id)
   if (res.ok) {
-    app.notify(`截屏已保存：${res.path}`, 'success')
+    app.notify(t('action.screenshotSaved', { path: res.path }), 'success')
     api.app.showItem(res.path)
-  } else app.notify(res.message || '截屏失败', 'error')
+  } else app.notify(res.message || t('action.screenshotFail'), 'error')
 }
 
 async function reboot() {
-  act((id) => api.control.reboot(id), '重启指令已发送', '重启失败')
+  act((id) => api.control.reboot(id), t('action.rebootSent'), t('action.rebootFail'))
 }
 
 async function toggleReverseNet() {
@@ -120,26 +122,26 @@ async function toggleReverseNet() {
   const res = status.running
     ? await api.control.gnirehtetStop()
     : await api.control.gnirehtetStart(selected.value.id)
-  app.notify(res.message || '操作完成', res.ok ? 'success' : 'error')
+  app.notify(res.message || t('action.opDone'), res.ok ? 'success' : 'error')
 }
 
 async function installApp() {
   const d = selected.value
   if (!d) return
-  const picked = await api.app.pickFile({ filters: [{ name: '安装包', extensions: ['apk', 'hap'] }] })
+  const picked = await api.app.pickFile({ filters: [{ name: t('action.installPkg'), extensions: ['apk', 'hap'] }] })
   if (!picked) return
-  app.notify('安装中，请稍候…', 'info')
+  app.notify(t('action.installing'), 'info')
   const res = await api.device.install(d.id, picked)
-  app.notify(res.ok ? '安装成功' : res.message || '安装失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.installSuccess') : res.message || t('action.installFail'), res.ok ? 'success' : 'error')
 }
 
 async function shellDialog() {
   const d = selected.value
   if (!d) return
-  const cmd = window.prompt('输入设备 shell 命令', 'getprop ro.product.model')
+  const cmd = window.prompt(t('action.shellPrompt'), 'getprop ro.product.model')
   if (!cmd) return
   const res = await api.device.shell(d.id, cmd)
-  app.notify(res.output || res.message || '执行完成', res.ok ? 'info' : 'error')
+  app.notify(res.output || res.message || t('action.execDone'), res.ok ? 'info' : 'error')
 }
 
 function openDetail() {
@@ -152,22 +154,22 @@ function openDetail() {
   <div class="page home-page">
     <div class="page-head compact">
       <div>
-        <h1 class="page-title">设备</h1>
-        <p class="page-desc">连接设备，一键开始投屏与控制</p>
+        <h1 class="page-title">{{ t('home.title') }}</h1>
+        <p class="page-desc">{{ t('home.desc') }}</p>
       </div>
       <div class="head-stat">
         <span class="stat-dot"></span>
-        <span>{{ store.onlineCount }} 台在线</span>
+        <span>{{ t('home.online', { count: store.onlineCount }) }}</span>
       </div>
     </div>
 
     <div class="card connect-card">
       <div class="connect-row">
-        <input v-model="store.wifi.host" class="input" placeholder="WiFi 设备 IP，如 192.168.1.5" />
+        <input v-model="store.wifi.host" class="input" :placeholder="t('home.wifiIpPlaceholder')" />
         <input v-model.number="store.wifi.port" class="input port-input" placeholder="5555" />
-        <button class="btn primary" @click="store.connectWifi()">WiFi 连接</button>
+        <button class="btn primary" @click="store.connectWifi()">{{ t('home.wifiConnect') }}</button>
         <button class="btn ghost refresh-btn" :disabled="store.loading" @click="store.refresh()">
-          {{ store.loading ? '刷新中…' : '刷新' }}
+          {{ store.loading ? t('home.refreshing') : t('home.refresh') }}
         </button>
       </div>
     </div>
@@ -178,45 +180,45 @@ function openDetail() {
           <span class="panel-name">{{ selected.name }}</span>
           <span class="mono muted device-id">{{ selected.id }}</span>
           <span class="chip" :class="selected.state === 'device' ? 'green' : 'red'">
-            {{ selected.state === 'device' ? '已连接' : '已离线' }}
+            {{ selected.state === 'device' ? t('home.connected') : t('home.offline') }}
           </span>
         </div>
         <div class="panel-actions">
-          <button class="btn primary small" :disabled="!canMirror" @click="showCast = true">投屏</button>
-          <button class="btn ghost small" @click="openDetail">详细管理 →</button>
+          <button class="btn primary small" :disabled="!canMirror" @click="showCast = true">{{ t('home.cast') }}</button>
+          <button class="btn ghost small" @click="openDetail">{{ t('home.detailManage') }}</button>
         </div>
       </div>
 
       <div class="all-functions">
-        <button class="fn-btn cast" :disabled="!canMirror" @click="showCast = true">投屏</button>
+        <button class="fn-btn cast" :disabled="!canMirror" @click="showCast = true">{{ t('home.cast') }}</button>
         <span class="fn-sep"></span>
-        <button v-for="k in keyActions" :key="k.key" class="fn-btn" :disabled="selected.state !== 'device'" @click="pressKey(k.key)">{{ k.label }}</button>
+        <button v-for="k in keyActions" :key="k.key" class="fn-btn" :disabled="selected.state !== 'device'" @click="pressKey(k.key)">{{ t(k.label) }}</button>
         <span class="fn-sep"></span>
-        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="act(id => api.control.rotate(id, 'auto'))">旋转</button>
-        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="act(id => api.control.notifications(id, true))">通知栏</button>
-        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="screenshot">截屏</button>
-        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="reboot">重启</button>
-        <button class="fn-btn" :disabled="selected.state !== 'device' || !isAndroid" @click="toggleReverseNet">反向供网</button>
+        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="act(id => api.control.rotate(id, 'auto'))">{{ t('home.rotate') }}</button>
+        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="act(id => api.control.notifications(id, true))">{{ t('home.notifications') }}</button>
+        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="screenshot">{{ t('home.screenshot') }}</button>
+        <button class="fn-btn" :disabled="selected.state !== 'device'" @click="reboot">{{ t('home.reboot') }}</button>
+        <button class="fn-btn" :disabled="selected.state !== 'device' || !isAndroid" @click="toggleReverseNet">{{ t('home.reverseNet') }}</button>
         <span class="fn-sep"></span>
-        <button class="fn-btn" :disabled="!isAndroid" @click="installApp">安装应用</button>
-        <button class="fn-btn" @click="shellDialog">执行脚本</button>
-        <button class="fn-btn" @click="openDetail">应用管理</button>
-        <button class="fn-btn danger" @click="store.stopAll && store.stopAll()">停止全部</button>
-        <button class="fn-btn danger" :disabled="selected.connection !== 'wifi'" @click="removeDevice(selected)">断开</button>
+        <button class="fn-btn" :disabled="!isAndroid" @click="installApp">{{ t('home.installApp') }}</button>
+        <button class="fn-btn" @click="shellDialog">{{ t('home.runScript') }}</button>
+        <button class="fn-btn" @click="openDetail">{{ t('home.appManage') }}</button>
+        <button class="fn-btn danger" @click="store.stopAll && store.stopAll()">{{ t('home.stopAll') }}</button>
+        <button class="fn-btn danger" :disabled="selected.connection !== 'wifi'" @click="removeDevice(selected)">{{ t('home.disconnect') }}</button>
       </div>
     </div>
 
     <div class="card list-card">
       <div class="card-title">
-        <span>设备列表</span>
-        <span class="muted" style="font-size: 12px; font-weight: 400">{{ store.items.length }} 台设备</span>
+        <span>{{ t('home.deviceList') }}</span>
+        <span class="muted" style="font-size: 12px; font-weight: 400">{{ t('home.devicesCount', { count: store.items.length }) }}</span>
       </div>
 
       <div v-if="!store.items.length" class="empty">
         <div class="empty-icon">▢</div>
-        <div>未发现设备</div>
+        <div>{{ t('home.noDevice') }}</div>
         <div class="muted" style="margin-top: 8px; font-size: 12px">
-          请用 USB 连接设备并开启调试，或使用上方 WiFi 连接
+          {{ t('home.noDeviceHint') }}
         </div>
       </div>
 
@@ -237,26 +239,26 @@ function openDetail() {
       <div class="cast-modal">
         <div class="modal-head">
           <div>
-            <h2 class="modal-title">投屏</h2>
+            <h2 class="modal-title">{{ t('home.castModalTitle') }}</h2>
             <p class="modal-sub">{{ selected?.name }} · {{ selected?.id }}</p>
           </div>
           <button class="close-btn" @click="showCast = false">✕</button>
         </div>
 
-        <div class="modal-label">选择投屏模式</div>
+        <div class="modal-label">{{ t('home.chooseMode') }}</div>
         <div class="mode-grid">
           <button
             v-for="a in mirrorActions" :key="a.mode"
             class="mode-btn" :class="{ primary: a.mode === 'mirror' }"
             :disabled="!canMirror || (a.mode !== 'mirror' && !isAndroid)"
             @click="startMirror(a.mode)"
-          >{{ a.label }}</button>
+          >{{ t(a.label) }}</button>
         </div>
 
-        <div class="modal-label">灵活启动（自定义参数）</div>
+        <div class="modal-label">{{ t('home.flexibleMode') }}</div>
         <div class="flexible-row">
-          <input v-model="flexibleArgs" class="input mono" placeholder="如 --turn-screen-off --stay-awake" @keyup.enter="startMirror('flexible')" />
-          <button class="btn" :disabled="!canMirror" @click="startMirror('flexible')">启动</button>
+          <input v-model="flexibleArgs" class="input mono" :placeholder="t('home.flexiblePlaceholder')" @keyup.enter="startMirror('flexible')" />
+          <button class="btn" :disabled="!canMirror" @click="startMirror('flexible')">{{ t('home.start') }}</button>
         </div>
       </div>
     </div>

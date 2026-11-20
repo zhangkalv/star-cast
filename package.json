@@ -1,7 +1,7 @@
 {
   "name": "star-record",
   "productName": "星点投屏",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "星点投屏 - 支持 Android / 鸿蒙 双端的手机投屏与控制软件（带机型边框）",
   "main": "out/main/index.js",
   "author": "星点",
@@ -17,6 +17,7 @@
   "dependencies": {
     "pinia": "^2.2.6",
     "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {

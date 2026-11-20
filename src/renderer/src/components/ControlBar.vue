@@ -1,6 +1,9 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/ipc'
 import { useAppStore } from '@/stores/app'
+
+const { t } = useI18n()
 
 const props = defineProps({
   deviceId: { type: String, required: true },
@@ -10,68 +13,68 @@ const props = defineProps({
 const app = useAppStore()
 
 const keys = [
-  { key: 'back', label: '返回' },
-  { key: 'home', label: '主页' },
-  { key: 'recents', label: '任务' },
-  { key: 'power', label: '电源' },
-  { key: 'volumeUp', label: '音量+' },
-  { key: 'volumeDown', label: '音量-' },
-  { key: 'sleep', label: '锁屏' },
-  { key: 'menu', label: '菜单' }
+  { key: 'back', label: 'keys.back' },
+  { key: 'home', label: 'keys.home' },
+  { key: 'recents', label: 'keys.recents' },
+  { key: 'power', label: 'keys.power' },
+  { key: 'volumeUp', label: 'keys.volumeUp' },
+  { key: 'volumeDown', label: 'keys.volumeDown' },
+  { key: 'sleep', label: 'keys.sleep' },
+  { key: 'menu', label: 'keys.menu' }
 ]
 
 async function press(key) {
   const res = await api.control.key(props.deviceId, key)
-  if (!res.ok) app.notify(res.message || '操作失败', 'error')
+  if (!res.ok) app.notify(res.message || t('action.opFail'), 'error')
 }
 
 async function rotate() {
   const res = await api.control.rotate(props.deviceId, 'auto')
-  if (!res.ok) app.notify(res.message || '旋转失败', 'error')
+  if (!res.ok) app.notify(res.message || t('action.rotateFail'), 'error')
 }
 
 async function notifications() {
   const res = await api.control.notifications(props.deviceId, true)
-  if (!res.ok) app.notify(res.message || '展开通知栏失败', 'error')
+  if (!res.ok) app.notify(res.message || t('action.notifFail'), 'error')
 }
 
 async function screenshot() {
   const res = await api.device.screenshot(props.deviceId)
   if (res.ok) {
-    app.notify(`截屏已保存：${res.path}`, 'success')
+    app.notify(t('action.screenshotSaved', { path: res.path }), 'success')
     api.app.showItem(res.path)
   } else {
-    app.notify(res.message || '截屏失败', 'error')
+    app.notify(res.message || t('action.screenshotFail'), 'error')
   }
 }
 
 async function reboot() {
   const res = await api.control.reboot(props.deviceId)
-  app.notify(res.ok ? '重启指令已发送' : res.message || '重启失败', res.ok ? 'success' : 'error')
+  app.notify(res.ok ? t('action.rebootSent') : res.message || t('action.rebootFail'), res.ok ? 'success' : 'error')
 }
 
 async function gnirehtet() {
   const status = await api.control.gnirehtetStatus()
   const res = status.running ? await api.control.gnirehtetStop() : await api.control.gnirehtetStart(props.deviceId)
-  app.notify(res.message || '操作完成', res.ok ? 'success' : 'error')
+  app.notify(res.message || t('action.opDone'), res.ok ? 'success' : 'error')
 }
 
 const extra = [
-  { label: '旋转', fn: rotate },
-  { label: '通知栏', fn: notifications },
-  { label: '截屏', fn: screenshot },
-  { label: '重启', fn: reboot },
-  { label: '反向供网', fn: gnirehtet }
+  { label: 'home.rotate', fn: rotate },
+  { label: 'home.notifications', fn: notifications },
+  { label: 'home.screenshot', fn: screenshot },
+  { label: 'home.reboot', fn: reboot },
+  { label: 'home.reverseNet', fn: gnirehtet }
 ]
 </script>
 
 <template>
   <div class="control-bar">
     <button v-for="item in keys" :key="item.key" class="ctrl-btn" :disabled="disabled" @click="press(item.key)">
-      {{ item.label }}
+      {{ t(item.label) }}
     </button>
     <button v-for="item in extra" :key="item.label" class="ctrl-btn" :disabled="disabled" @click="item.fn">
-      {{ item.label }}
+      {{ t(item.label) }}
     </button>
   </div>
 </template>

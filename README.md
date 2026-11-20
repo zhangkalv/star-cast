@@ -87,7 +87,7 @@ electron-vite + Vue 3 + Pinia
 
 普通用户无需配置开发环境，直接下载安装包双击安装即可：
 
-- **最新版下载（单个完整 exe，推荐）**：[星点投屏 Setup 0.1.1.exe](https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_0.1.1.exe)
+- **最新版下载（单个完整 exe，永久链接，始终指向最新版本）**：[星点投屏 Setup latest.exe](https://api.siyushiji.com/fingertip/packages/%E6%98%9F%E7%82%B9%E6%8A%95%E5%B1%8F_Setup_latest.exe)
 
 内置 adb / scrcpy / hdc 等工具，**装完即可用**，无需另外配置环境变量。首次用 USB 投屏需在手机上开启「开发者选项 → USB 调试」。
 

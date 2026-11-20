@@ -1,5 +1,8 @@
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/ipc'
+
+const { t } = useI18n()
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -61,7 +64,7 @@ async function browse() {
         :placeholder="placeholder"
         @input="emit('update:modelValue', $event.target.value)"
       />
-      <button class="btn small" @click="browse">浏览</button>
+      <button class="btn small" @click="browse">{{ t('action.browse') }}</button>
     </div>
 
     <input
